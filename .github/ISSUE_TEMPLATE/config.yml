@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Discussões
+    url: https://github.com/DuckOverload/teaformation-site/discussions
+    about: Para perguntas, ideias e discussões gerais sobre o projeto
+  - name: 📧 Contato
+    url: mailto:nicolas.felipe.dev@gmail.com
+    about: Para questões privadas ou assuntos sensíveis

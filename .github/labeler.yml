@@ -1,0 +1,78 @@
+# Auto-labeling configuration
+# Labels PRs based on which files are changed
+
+# Frontend/UI
+'area: ui':
+  - 'components/ui/**/*'
+  - 'app/**/layout.tsx'
+  - 'app/globals.css'
+  - 'tailwind.config.ts'
+
+# Components
+'area: components':
+  - 'components/**/*'
+  - '!components/ui/**/*'
+
+# Blog
+'area: blog':
+  - 'app/blog/**/*'
+  - 'content/posts/**/*'
+  - 'lib/blog.ts'
+
+# Authentication
+'area: auth':
+  - 'app/auth/**/*'
+  - 'middleware.ts'
+  - 'lib/supabase/**/*'
+
+# API
+'area: api':
+  - 'app/api/**/*'
+
+# Dashboard/Área de Membros
+'area: dashboard':
+  - 'app/dashboard/**/*'
+
+# E-books
+'area: ebooks':
+  - 'app/ebooks/**/*'
+  - 'app/dashboard/ebooks/**/*'
+
+# SEO
+'area: seo':
+  - 'app/**/metadata.ts'
+  - 'app/sitemap.ts'
+  - 'app/robots.ts'
+  - 'lib/seo.ts'
+
+# Configuração
+'area: config':
+  - '*.config.*'
+  - '.env*'
+  - 'package.json'
+  - 'package-lock.json'
+  - 'tsconfig.json'
+
+# Documentação
+'area: docs':
+  - '*.md'
+  - 'docs/**/*'
+  - '.github/**/*.md'
+
+# CI/CD
+'area: ci':
+  - '.github/workflows/**/*'
+  - '.github/actions/**/*'
+
+# Testes
+'area: tests':
+  - '**/*.test.ts'
+  - '**/*.test.tsx'
+  - '**/*.spec.ts'
+  - '**/*.spec.tsx'
+  - '__tests__/**/*'
+
+# Dependencies
+'dependencies':
+  - 'package.json'
+  - 'package-lock.json'

@@ -1,0 +1,45 @@
+name: 🚀 Deploy Preview Comment
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  comment-preview:
+    name: Comment Deploy Preview URL
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - name: 💬 Comment Preview URL
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = context.issue.number;
+            const deployUrl = `https://teaformation-${context.payload.pull_request.head.ref.replace(/\//g, '-')}.vercel.app`;
+            
+            const comment = `## 🚀 Deploy Preview
+            
+            Deploy preview está sendo gerado pela Vercel.
+            
+            **Preview URL:** Aguardando deploy...
+            
+            A Vercel irá comentar automaticamente quando o deploy estiver pronto.
+            
+            ### ✅ Checklist de Revisão
+            - [ ] Testar responsividade (mobile, tablet, desktop)
+            - [ ] Verificar performance (Lighthouse)
+            - [ ] Testar funcionalidades adicionadas/modificadas
+            - [ ] Verificar acessibilidade
+            - [ ] Confirmar que não há erros no console
+            
+            ---
+            *Preview será atualizado automaticamente a cada push*`;
+            
+            github.rest.issues.createComment({
+              issue_number: prNumber,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });

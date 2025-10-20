@@ -1,0 +1,76 @@
+name: 🔍 CI - Lint, Type Check & Build
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+jobs:
+  quality-checks:
+    name: Quality Checks
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [20.x]
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🔍 Run ESLint
+        run: npm run lint
+
+      - name: 🔎 Run TypeScript type check
+        run: npm run type-check || npx tsc --noEmit
+
+      - name: 🏗️ Build project
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+
+      - name: ✅ All checks passed
+        run: echo "✅ Quality checks completed successfully!"
+
+  lighthouse:
+    name: Lighthouse CI
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🏗️ Build project
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+
+      - name: 🚀 Run Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v11
+        with:
+          urls: |
+            http://localhost:3000
+          uploadArtifacts: true
+          temporaryPublicStorage: true

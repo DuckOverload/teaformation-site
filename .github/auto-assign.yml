@@ -1,0 +1,43 @@
+# Auto-assign configuration
+# Automatically assigns reviewers when a PR is opened
+
+# Adicione apenas revisores quando não for um draft PR
+addReviewers: true
+
+# Adicione assignees (quem está responsável pelo PR)
+addAssignees: author
+
+# Número de revisores para adicionar (se houver múltiplos)
+numberOfReviewers: 1
+
+# Lista de revisores potenciais
+# IMPORTANTE: Substitua pelos usernames reais da sua equipe
+reviewers:
+  - DuckOverload
+  # Adicione outros membros do time aqui
+  # - outro-membro
+  # - mais-um-membro
+
+# Regras específicas por tipo de arquivo (opcional)
+# reviewGroups:
+#   frontend:
+#     - frontend-dev-1
+#     - frontend-dev-2
+#   backend:
+#     - backend-dev-1
+#     - backend-dev-2
+
+# Filtros para quando adicionar revisores
+filterLabels:
+  exclude:
+    - wip
+    - draft
+  include:
+    - ready-for-review
+
+# Skip keywords - não adicionar revisor se o PR tiver estas palavras no título
+skipKeywords:
+  - wip
+  - draft
+  - [WIP]
+  - [Draft]
