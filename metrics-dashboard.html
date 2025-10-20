@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TEAFormation - Metrics Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-50">
+    <header class="bg-white shadow-sm border-b">
+        <div class="max-w-7xl mx-auto px-8 py-6">
+            <h1 class="text-3xl font-bold">📊 TEAFormation Metrics Dashboard</h1>
+            <p class="text-gray-600 mt-1">Última atualização: <span id="lastUpdate">-</span></p>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-8 py-8">
+        <!-- Quick Stats -->
+        <div class="grid grid-cols-4 gap-6 mb-8">
+            <div class="bg-white rounded-lg shadow p-6">
+                <p class="text-sm text-gray-600">Total Issues</p>
+                <p class="text-3xl font-bold mt-2" id="totalIssues">-</p>
+                <p class="text-sm text-green-600 mt-2"><span id="openIssues">-</span> abertas</p>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <p class="text-sm text-gray-600">Pull Requests</p>
+                <p class="text-3xl font-bold mt-2" id="totalPRs">-</p>
+                <p class="text-sm text-purple-600 mt-2"><span id="openPRs">-</span> abertas</p>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <p class="text-sm text-gray-600">Code Quality</p>
+                <p class="text-3xl font-bold mt-2" id="codeQuality">A</p>
+                <p class="text-sm text-gray-600 mt-2"><span id="eslintErrors">0</span> erros</p>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <p class="text-sm text-gray-600">Test Coverage</p>
+                <p class="text-3xl font-bold mt-2" id="testCoverage">0%</p>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="grid grid-cols-2 gap-6 mb-8">
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-semibold mb-4">📈 Commits (7 dias)</h3>
+                <canvas id="commitsChart"></canvas>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-semibold mb-4">📊 Issues por Status</h3>
+                <canvas id="issuesChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Security & Dependencies -->
+        <div class="grid grid-cols-3 gap-6">
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-semibold mb-4">🔒 Security</h3>
+                <div class="text-center">
+                    <div class="text-4xl font-bold text-green-600 mb-2" id="securityScore">A</div>
+                    <p class="text-sm text-gray-600"><span id="vulnerabilities">0</span> vulnerabilidades</p>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-semibold mb-4">📦 Dependências</h3>
+                <div class="space-y-2">
+                    <div class="flex justify-between">
+                        <span class="text-sm">Produção</span>
+                        <span class="font-semibold" id="prodDeps">-</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-sm">Dev</span>
+                        <span class="font-semibold" id="devDeps">-</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-semibold mb-4">🎯 Lighthouse</h3>
+                <div class="space-y-2">
+                    <div>
+                        <span class="text-sm">Performance</span>
+                        <div class="w-full bg-gray-200 rounded h-2 mt-1">
+                            <div class="bg-green-600 h-2 rounded" style="width: 98%"></div>
+                        </div>
+                    </div>
+                    <div>
+                        <span class="text-sm">SEO</span>
+                        <div class="w-full bg-gray-200 rounded h-2 mt-1">
+                            <div class="bg-green-600 h-2 rounded" style="width: 100%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Mock data
+        document.getElementById('lastUpdate').textContent = new Date().toLocaleString('pt-BR');
+        document.getElementById('totalIssues').textContent = '47';
+        document.getElementById('openIssues').textContent = '12';
+        document.getElementById('totalPRs').textContent = '23';
+        document.getElementById('openPRs').textContent = '3';
+        document.getElementById('prodDeps').textContent = '15';
+        document.getElementById('devDeps').textContent = '28';
+
+        // Commits Chart
+        new Chart(document.getElementById('commitsChart'), {
+            type: 'line',
+            data: {
+                labels: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'],
+                datasets: [{
+                    label: 'Commits',
+                    data: [12, 19, 3, 5, 2, 3, 7],
+                    borderColor: 'rgb(59, 130, 246)',
+                    tension: 0.1
+                }]
+            }
+        });
+
+        // Issues Chart
+        new Chart(document.getElementById('issuesChart'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Backlog', 'To Do', 'In Progress', 'Done'],
+                datasets: [{
+                    data: [15, 8, 4, 20],
+                    backgroundColor: ['#6B7280', '#3B82F6', '#F59E0B', '#10B981']
+                }]
+            }
+        });
+    </script>
+</body>
+</html>
