@@ -7,6 +7,7 @@
     "build": "next build --turbopack",
     "start": "next build && next start",
     "lint": "eslint",
+    "type-check": "tsc --noEmit",
     "test": "echo \"Error: no test specified\" && exit 1",
     "prepare": "husky"
   },
