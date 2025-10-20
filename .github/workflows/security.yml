@@ -112,36 +112,43 @@ jobs:
     name: Docker Security Scan
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
-    
+    permissions:
+      contents: read
+      security-events: write
+
     steps:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
-      
-      - name: 🐳 Build Docker image (if Dockerfile exists)
-        id: docker-build
+
+      - name: 🐳 Check for Dockerfile
+        id: dockerfile-check
         run: |
           if [ -f "Dockerfile" ]; then
-            docker build -t teaformation:${{ github.sha }} .
-            echo "image_exists=true" >> $GITHUB_OUTPUT
+            echo "exists=true" >> $GITHUB_OUTPUT
           else
-            echo "image_exists=false" >> $GITHUB_OUTPUT
+            echo "exists=false" >> $GITHUB_OUTPUT
             echo "ℹ️ No Dockerfile found, skipping Docker scan"
           fi
-      
+
+      - name: 🐳 Build Docker image
+        if: steps.dockerfile-check.outputs.exists == 'true'
+        run: docker build -t teaformation:${{ github.sha }} .
+
       - name: 🔍 Run Trivy vulnerability scanner
-        if: steps.docker-build.outputs.image_exists == 'true'
+        if: steps.dockerfile-check.outputs.exists == 'true'
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: 'teaformation:${{ github.sha }}'
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
-      
+
       - name: 📤 Upload Trivy results to GitHub Security
-        if: steps.docker-build.outputs.image_exists == 'true'
+        if: steps.dockerfile-check.outputs.exists == 'true'
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-results.sarif'
+        continue-on-error: true
 
   security-headers:
     name: Security Headers Check
