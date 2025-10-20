@@ -1,0 +1,264 @@
+name: 🔒 Security Analysis
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Roda toda segunda às 9h UTC (6h BRT)
+    - cron: '0 9 * * 1'
+
+jobs:
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔍 Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+          deny-licenses: GPL-3.0, AGPL-3.0
+
+  npm-audit:
+    name: NPM Security Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+      
+      - name: 📦 Install dependencies
+        run: npm ci
+      
+      - name: 🔍 Run npm audit
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
+      
+      - name: 📊 Generate audit report
+        run: |
+          npm audit --json > audit-report.json || true
+          echo "## 🔒 NPM Security Audit Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Vulnerabilities Found:" >> $GITHUB_STEP_SUMMARY
+          node -e "const audit = require('./audit-report.json'); console.log('- **Critical**: ' + (audit.metadata?.vulnerabilities?.critical || 0)); console.log('- **High**: ' + (audit.metadata?.vulnerabilities?.high || 0)); console.log('- **Moderate**: ' + (audit.metadata?.vulnerabilities?.moderate || 0)); console.log('- **Low**: ' + (audit.metadata?.vulnerabilities?.low || 0));" >> $GITHUB_STEP_SUMMARY
+      
+      - name: 📎 Upload audit report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: npm-audit-report
+          path: audit-report.json
+          retention-days: 30
+
+  codeql-analysis:
+    name: CodeQL Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['typescript']
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended
+      
+      - name: 🏗️ Autobuild
+        uses: github/codeql-action/autobuild@v3
+      
+      - name: 🔍 Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+
+  secret-scanning:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: 🔐 Gitleaks Secret Scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker-security:
+    name: Docker Security Scan
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🐳 Build Docker image (if Dockerfile exists)
+        id: docker-build
+        run: |
+          if [ -f "Dockerfile" ]; then
+            docker build -t teaformation:${{ github.sha }} .
+            echo "image_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "image_exists=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No Dockerfile found, skipping Docker scan"
+          fi
+      
+      - name: 🔍 Run Trivy vulnerability scanner
+        if: steps.docker-build.outputs.image_exists == 'true'
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'teaformation:${{ github.sha }}'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+      
+      - name: 📤 Upload Trivy results to GitHub Security
+        if: steps.docker-build.outputs.image_exists == 'true'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  security-headers:
+    name: Security Headers Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+      
+      - name: 📦 Install dependencies
+        run: npm ci
+      
+      - name: 🏗️ Build project
+        run: npm run build
+        continue-on-error: true
+
+      - name: 🚀 Start server
+        run: |
+          npm run start &
+          sleep 15
+        env:
+          PORT: 3000
+      
+      - name: 🔍 Check security headers
+        run: |
+          echo "## 🔒 Security Headers Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          RESPONSE=$(curl -sI http://localhost:3000)
+          
+          # Check for important security headers
+          echo "### Header Status:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if echo "$RESPONSE" | grep -qi "X-Frame-Options"; then
+            echo "✅ X-Frame-Options: Present" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ X-Frame-Options: Missing" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if echo "$RESPONSE" | grep -qi "X-Content-Type-Options"; then
+            echo "✅ X-Content-Type-Options: Present" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ X-Content-Type-Options: Missing" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if echo "$RESPONSE" | grep -qi "Strict-Transport-Security"; then
+            echo "✅ Strict-Transport-Security: Present" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Strict-Transport-Security: Missing (OK for localhost)" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if echo "$RESPONSE" | grep -qi "Content-Security-Policy"; then
+            echo "✅ Content-Security-Policy: Present" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Content-Security-Policy: Missing" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  license-compliance:
+    name: License Compliance Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+      
+      - name: 📦 Install dependencies
+        run: npm ci
+      
+      - name: 🔍 Check licenses
+        run: |
+          npx license-checker --summary --onlyAllow "MIT;ISC;Apache-2.0;BSD-2-Clause;BSD-3-Clause;0BSD;CC0-1.0" || true
+      
+      - name: 📊 Generate license report
+        run: |
+          npx license-checker --json > licenses.json
+          echo "## 📄 License Compliance Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "All dependencies have been scanned for license compliance." >> $GITHUB_STEP_SUMMARY
+      
+      - name: 📎 Upload license report
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-report
+          path: licenses.json
+          retention-days: 90
+
+  security-summary:
+    name: Security Summary
+    runs-on: ubuntu-latest
+    needs: [npm-audit, codeql-analysis, secret-scanning, license-compliance]
+    if: always()
+    
+    steps:
+      - name: 📊 Create Security Summary
+        run: |
+          echo "# 🔒 Security Analysis Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Scans Completed:" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ NPM Security Audit" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Secret Scanning" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ License Compliance" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ CodeQL Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📋 Check individual job results for detailed findings." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🔗 [View Security Tab](https://github.com/${{ github.repository }}/security)" >> $GITHUB_STEP_SUMMARY

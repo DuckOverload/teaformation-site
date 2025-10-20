@@ -1,0 +1,356 @@
+name: 📊 Metrics Dashboard
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Roda diariamente às 00:00 UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Permite execução manual
+
+jobs:
+  code-quality-metrics:
+    name: Code Quality Metrics
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Histórico completo para análise
+      
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+      
+      - name: 📦 Install dependencies
+        run: npm ci
+      
+      - name: 📏 Run ESLint with metrics
+        run: |
+          npx eslint . --format json --output-file eslint-report.json || true
+          
+          echo "## 📊 Code Quality Metrics" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Parse ESLint results
+          TOTAL_ERRORS=$(node -e "const data = require('./eslint-report.json'); console.log(data.reduce((sum, file) => sum + file.errorCount, 0));")
+          TOTAL_WARNINGS=$(node -e "const data = require('./eslint-report.json'); console.log(data.reduce((sum, file) => sum + file.warningCount, 0));")
+          FILES_WITH_ISSUES=$(node -e "const data = require('./eslint-report.json'); console.log(data.filter(f => f.errorCount > 0 || f.warningCount > 0).length);")
+          
+          echo "### ESLint Analysis:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Errors**: $TOTAL_ERRORS" >> $GITHUB_STEP_SUMMARY
+          echo "- **Warnings**: $TOTAL_WARNINGS" >> $GITHUB_STEP_SUMMARY
+          echo "- **Files with issues**: $FILES_WITH_ISSUES" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+      
+      - name: 📈 Code Complexity Analysis
+        run: |
+          echo "### Code Complexity:" >> $GITHUB_STEP_SUMMARY
+
+          # Análise simples de complexidade ciclomática
+          TS_FILES=$(find . -type f \( -name "*.ts" -o -name "*.tsx" \) ! -path "*/node_modules/*" ! -path "*/.next/*")
+
+          if [ -n "$TS_FILES" ]; then
+            COMPLEX_FUNCTIONS=$(echo "$TS_FILES" | xargs grep -h "function\|const.*=.*(" 2>/dev/null | wc -l || echo "0")
+            echo "- **Total functions/components**: $COMPLEX_FUNCTIONS" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- No TypeScript files found for analysis" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+      
+      - name: 📊 TypeScript Stats
+        run: |
+          # Contar arquivos TypeScript
+          TS_FILES=$(find . -name "*.ts" -o -name "*.tsx" | grep -v node_modules | wc -l)
+          TOTAL_LINES=$(find . -name "*.ts" -o -name "*.tsx" | grep -v node_modules | xargs wc -l | tail -1 | awk '{print $1}')
+          
+          echo "### TypeScript Statistics:" >> $GITHUB_STEP_SUMMARY
+          echo "- **TypeScript files**: $TS_FILES" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total lines of code**: $TOTAL_LINES" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+      
+      - name: 📎 Upload reports
+        uses: actions/upload-artifact@v4
+        if: hashFiles('eslint-report.json') != ''
+        with:
+          name: code-quality-reports
+          path: eslint-report.json
+          retention-days: 30
+        continue-on-error: true
+
+  performance-metrics:
+    name: Performance Metrics
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+      
+      - name: 📦 Install dependencies
+        run: npm ci
+      
+      - name: 🏗️ Build project
+        run: |
+          START_TIME=$(date +%s)
+          npm run build || echo "Build failed - this may be expected if secrets are not configured"
+          END_TIME=$(date +%s)
+          BUILD_TIME=$((END_TIME - START_TIME))
+
+          echo "## ⚡ Performance Metrics" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Build Performance:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build time**: ${BUILD_TIME}s" >> $GITHUB_STEP_SUMMARY
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        continue-on-error: true
+      
+      - name: 📦 Bundle Size Analysis
+        run: |
+          # Analisar tamanho do bundle
+          BUNDLE_SIZE=$(du -sh .next | awk '{print $1}')
+          
+          echo "- **Bundle size**: $BUNDLE_SIZE" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+      
+      - name: 🚀 Start Next.js server
+        run: |
+          npm run start &
+          echo $! > .next-server.pid
+
+          # Aguardar servidor iniciar
+          echo "Waiting for server to be ready..."
+          timeout 60 bash -c 'until curl -s http://localhost:3000 > /dev/null; do sleep 2; done' || echo "Server may not be ready"
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        continue-on-error: true
+
+      - name: 🎯 Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v11
+        with:
+          urls: |
+            http://localhost:3000
+          uploadArtifacts: true
+          temporaryPublicStorage: true
+        continue-on-error: true
+
+      - name: 🛑 Stop Next.js server
+        if: always()
+        run: |
+          if [ -f .next-server.pid ]; then
+            kill $(cat .next-server.pid) || true
+            rm .next-server.pid
+          fi
+
+  dependency-metrics:
+    name: Dependency Metrics
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+      
+      - name: 📊 Analyze dependencies
+        run: |
+          echo "## 📦 Dependency Metrics" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Contar dependências
+          PROD_DEPS=$(node -e "console.log(Object.keys(require('./package.json').dependencies || {}).length)")
+          DEV_DEPS=$(node -e "console.log(Object.keys(require('./package.json').devDependencies || {}).length)")
+          TOTAL_DEPS=$((PROD_DEPS + DEV_DEPS))
+          
+          echo "### Dependency Count:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Production dependencies**: $PROD_DEPS" >> $GITHUB_STEP_SUMMARY
+          echo "- **Dev dependencies**: $DEV_DEPS" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total**: $TOTAL_DEPS" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+      
+      - name: 📦 Check for outdated packages
+        run: |
+          npm outdated --json > outdated.json 2>/dev/null || echo "{}" > outdated.json
+
+          OUTDATED_COUNT=$(node -e "try { const fs = require('fs'); const data = JSON.parse(fs.readFileSync('./outdated.json', 'utf8')); console.log(Object.keys(data).length); } catch(e) { console.log(0); }")
+
+          echo "### Outdated Packages:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Packages needing update**: $OUTDATED_COUNT" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+      
+      - name: 📎 Upload dependency report
+        uses: actions/upload-artifact@v4
+        if: hashFiles('outdated.json') != ''
+        with:
+          name: dependency-report
+          path: outdated.json
+          retention-days: 30
+        continue-on-error: true
+
+  git-metrics:
+    name: Git & Productivity Metrics
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: 📊 Git Statistics
+        run: |
+          echo "## 📈 Git Metrics" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Total commits
+          TOTAL_COMMITS=$(git rev-list --count HEAD)
+          
+          # Commits última semana
+          LAST_WEEK_COMMITS=$(git rev-list --count --since="1 week ago" HEAD)
+          
+          # Contribuidores
+          CONTRIBUTORS=$(git shortlog -s -n | wc -l)
+          
+          # Branches
+          TOTAL_BRANCHES=$(git branch -a | grep -v HEAD | wc -l)
+          
+          echo "### Repository Statistics:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total commits**: $TOTAL_COMMITS" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commits (last 7 days)**: $LAST_WEEK_COMMITS" >> $GITHUB_STEP_SUMMARY
+          echo "- **Contributors**: $CONTRIBUTORS" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total branches**: $TOTAL_BRANCHES" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+      
+      - name: 👥 Top Contributors (Last 30 days)
+        run: |
+          echo "### Top Contributors (Last 30 Days):" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          git shortlog -s -n --since="30 days ago" | head -5 | while read line; do
+            echo "- $line" >> $GITHUB_STEP_SUMMARY
+          done
+          echo "" >> $GITHUB_STEP_SUMMARY
+      
+      - name: 🏷️ Recent Tags
+        run: |
+          echo "### Recent Releases:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          git tag --sort=-creatordate | head -5 | while read tag; do
+            DATE=$(git log -1 --format=%ai $tag | cut -d' ' -f1)
+            echo "- **$tag** ($DATE)" >> $GITHUB_STEP_SUMMARY
+          done || echo "No releases yet" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+  test-coverage:
+    name: Test Coverage Metrics
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+      
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+      
+      - name: 📦 Install dependencies
+        run: npm ci
+      
+      - name: 🧪 Run tests with coverage
+        run: |
+          # Se tiver testes configurados
+          if npm run test:coverage 2>/dev/null; then
+            echo "## 🧪 Test Coverage" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Test coverage report generated. See artifacts." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## 🧪 Test Coverage" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ No tests configured yet." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**TODO**: Add test suite for the project" >> $GITHUB_STEP_SUMMARY
+          fi
+        continue-on-error: true
+      
+      - name: 📎 Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 30
+        continue-on-error: true
+
+  metrics-summary:
+    name: Generate Metrics Summary
+    runs-on: ubuntu-latest
+    needs: [code-quality-metrics, performance-metrics, dependency-metrics, git-metrics, test-coverage]
+    if: always()
+    
+    steps:
+      - name: 📊 Create Comprehensive Summary
+        run: |
+          echo "# 📊 TEAFormation - Metrics Dashboard" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Generated**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📋 Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "All metrics have been collected and analyzed." >> $GITHUB_STEP_SUMMARY
+          echo "Check individual job results for detailed metrics." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Quick Links:" >> $GITHUB_STEP_SUMMARY
+          echo "- 📊 [Code Quality](#code-quality-metrics)" >> $GITHUB_STEP_SUMMARY
+          echo "- ⚡ [Performance](#performance-metrics)" >> $GITHUB_STEP_SUMMARY
+          echo "- 📦 [Dependencies](#dependency-metrics)" >> $GITHUB_STEP_SUMMARY
+          echo "- 📈 [Git Stats](#git-metrics)" >> $GITHUB_STEP_SUMMARY
+          echo "- 🧪 [Test Coverage](#test-coverage)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "💡 **Tip**: Download artifacts for detailed reports" >> $GITHUB_STEP_SUMMARY
+      
+      - name: 📤 Export metrics to JSON
+        run: |
+          cat > metrics-summary.json << EOF
+          {
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "repository": "${{ github.repository }}",
+            "branch": "${{ github.ref_name }}",
+            "commit": "${{ github.sha }}",
+            "workflow_run": "${{ github.run_id }}",
+            "metrics": {
+              "code_quality": "See code-quality-reports artifact",
+              "performance": "See lighthouse reports",
+              "dependencies": "See dependency-report artifact",
+              "git_stats": "See git-metrics job summary",
+              "coverage": "See coverage-report artifact"
+            }
+          }
+          EOF
+      
+      - name: 📎 Upload summary JSON
+        uses: actions/upload-artifact@v4
+        with:
+          name: metrics-summary
+          path: metrics-summary.json
+          retention-days: 90

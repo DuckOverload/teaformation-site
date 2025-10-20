@@ -32,13 +32,10 @@ jobs:
         run: npm run lint
 
       - name: 🔎 Run TypeScript type check
-        run: npm run type-check || npx tsc --noEmit
+        run: npm run type-check
 
       - name: 🏗️ Build project
         run: npm run build
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
       - name: ✅ All checks passed
         run: echo "✅ Quality checks completed successfully!"
@@ -63,9 +60,6 @@ jobs:
 
       - name: 🏗️ Build project
         run: npm run build
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
       - name: 🚀 Run Lighthouse CI
         uses: treosh/lighthouse-ci-action@v11
